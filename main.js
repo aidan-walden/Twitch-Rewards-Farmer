@@ -2,7 +2,9 @@ const puppet = require('puppeteer');
 const readline = require('readline');
 const request = require('request');
 const fs = require('fs');
-const async = require('async');
+const ini = require('ini');
+
+const config = ini.parse(fs.readFileSync('./config.ini', 'utf-8'));
 let loggedIn;
 
 function askQuestion(query) {
@@ -32,12 +34,21 @@ function setTerminalTitle(title)
 
 async function loginToTwitch(browser, page, callback) {
     (async () => {
-        loggedIn = fs.existsSync('./cookies.json');
-        if(loggedIn)
+        let username;
+        let cookiesStored = fs.existsSync('./cookies.json');
+        if(cookiesStored)
         {
             console.log("Loading cookies...")
-            const cookiesArr = require('./cookies.json');
-            if(cookiesArr.length !== 0)
+            if(config.AppBehavior.UseMultipleAccounts == 'yes') {
+                let cookies = JSON.parse(fs.readFileSync('./cookies.json', 'utf8'));
+                username = cookies[5]['value'];
+                fs.renameSync('./cookies.json', './cookies-' + username + '.json');
+            }
+            
+            let cookiesArr;
+            if(config.AppBehavior.UseMultipleAccounts == 'yes') cookiesArr = require('./cookies-' + username + '.json');
+            else cookiesArr = require('./cookies.json');
+            if(cookiesArr.length != 0)
             {
                 for (let cookie of cookiesArr)
                 {
@@ -46,53 +57,78 @@ async function loginToTwitch(browser, page, callback) {
             }
             console.log("Cookies loaded, logging in with cookies...")
         }
-        await Promise.all([
-            page.goto('https://twitch.tv/login'),
-        ])
-        page.waitForNavigation({ waitUntil: 'networkidle0' }) //Wait for page to be loaded
+        else if (config.AppBehavior.UseMultipleAccounts == 'yes') {
+            const loginUsername = await askQuestion("What username would you like to login with? (This is only used to get cookies from an existing login, if you haven't logged in before you can leave this blank)\n>");
+            if(fs.existsSync('./cookies-' + loginUsername + '.json')) {
+                cookiesStored = true;
+                const cookiesArr = require('./cookies-' + loginUsername + '.json');
+                if(cookiesArr.length != 0)
+                {
+                    for (let cookie of cookiesArr)
+                    {
+                        await page.setCookie(cookie);
+                    }
+                }
+            }
+        }
+        await page.goto('https://twitch.tv/login');
+        //page.waitForNavigation({ waitUntil: 'networkidle0' }) //Wait for page to be loaded
         loggedIn = await page.$('input[autocomplete="username"]') == null;
         if(!loggedIn)
         {
             console.log("We have to login");
-            const user = await askQuestion("Username?\n>");
-            const pass = await askQuestion("Password?\n>");
-            await page.keyboard.type(user);
-            await page.keyboard.down("Tab");
-            await page.keyboard.type(pass);
-            await page.keyboard.down("Tab");
-            await page.keyboard.down("Tab");
-            await page.keyboard.down("Enter")
-            await page.waitFor(2500);
-            let element = 'label[class="tw-form-label"]';
-            if(await page.$('label[class="tw-form-label"]') !== null && await page.evaluate(element => document.querySelector(element).textContent, element) == "Token") //Asking for 2fa
-            {
-                const twofa = await askQuestion("2-Factor Code?\n>");
-                await page.keyboard.type(twofa);
-                let selector = 'input[class="tw-checkbox__input"]'; //Remeber this computer
-                await page.evaluate((selector) => document.querySelector(selector).click(), selector); 
-                await page.keyboard.down("Tab");
-                await page.keyboard.down("Enter")
-                await page.waitFor(2500);
+            if(cookiesStored) {
+                let filePath;
+                if(config.AppBehavior.UseMultipleAccounts == 'yes') filePath = './cookies-' + username + '.json';
+                else filePath = './cookies.json';
+                fs.unlink((filePath), (err) => {
+                    if (err) {
+                        console.error(err);
+                        return;
+                    }
+                });
+                await browser.close();
+                console.log("Please restart the application in order to manually log into Twitch.");
+                return;
             }
-            const cookiesObj = await page.cookies();
-            let data = JSON.stringify(cookiesObj);
-            fs.writeFileSync('./cookies.json', data);
+            else
+            {
+                page
+                    //.waitForSelector('button.tw-align-items-center tw-align-middle tw-border-bottom-left-radius-medium tw-border-bottom-right-radius-medium tw-border-top-left-radius-medium tw-border-top-right-radius-medium tw-core-button tw-core-button--secondary tw-inline-flex tw-interactive tw-justify-content-center tw-overflow-hidden tw-relative')
+                    .waitForNavigation()
+                    .then((async function() {
+                        console.log("We should be logged in now.");
+                        loggedIn = true;
+                        //page.removeAllListeners('pageerror');
+                        const cookiesObj = await page.cookies();
+                        let data = JSON.stringify(cookiesObj);
+                        let filePath;
+                        if(config.AppBehavior.UseMultipleAccounts == 'yes') filePath = './cookies-' + data[5]['value'] + '.json';
+                        else filePath = './cookies.json';
+                        fs.writeFileSync(filePath, data);
+                        await loginToTwitch(browser, page, callback);
+                    }));
+            }
         }
-        console.log("We should be logged in now.");
-        loggedIn = true;
-        page.removeAllListeners('pageerror');
-        callback();
+        else
+        {
+            await browser.close();
+            console.log("No manual login necessary.");
+            callback(cookiesStored);
+        }
+        
     })();
 }
 
 async function viewTopStreamer() {
     //Overwatch title id is 488552
+    //Valorant title id is 516575
     let headers = {
-        'Client-ID': 'TWITCH API KEY HERE'
+        'Client-ID': config.RequestData.clientid
     };
     let topStream;
     //Request top streamers
-    request.get({ url: 'https://api.twitch.tv/helix/streams?game_id=488552', headers: headers}, function(e, r, body) {
+    request.get({ url: 'https://api.twitch.tv/helix/streams?game_id=' + config.RequestData.game, headers: headers}, function(e, r, body) {
         let data = JSON.parse(body);
         const sortedStreams = data.data.sort(function(a, b) {
             return b.viewer_count - a.viewer_count;
@@ -121,10 +157,11 @@ async function viewTopStreamer() {
 
     async function afterEval() {
         //View that livestream
-        const browser = await puppet.launch({
+        let browser = await puppet.launch({
             executablePath: './Application/chrome.exe',
+            headless: false
         });
-        const page = await browser.newPage();
+        let page = await browser.newPage();
         await page.setViewport({
             width: 1280,
             height: 720,
@@ -132,14 +169,25 @@ async function viewTopStreamer() {
         });
         await page.setDefaultTimeout(0);
         if (!loggedIn) {
-            await loginToTwitch(browser, page, async function() {
+            await loginToTwitch(browser, page, async function(cookiesStored) {
+                if(!cookiesStored) return;
+                browser = await puppet.launch({
+                    executablePath: './Application/chrome.exe'
+                });
+                page = await browser.newPage();
+                await page.setViewport({
+                    width: 1280,
+                    height: 720,
+                    deviceScaleFactor: 1,
+                });
+                await page.setDefaultTimeout(0);
                 await page.goto(`https://twitch.tv/${topStream.user_name}`);
                 await page.waitFor('body')
                 console.log(`Now watching ${topStream.user_name}`);
                 setTerminalTitle(`Twitch Rewards Farmer - ${topStream.user_name}`);
                 await page.waitFor(3000);
                 matureButton = await page.$('button[class="player-content-button js-player-mature-accept js-mature-accept-label"]');
-                if (matureButton !== null)
+                if (matureButton != null)
                 {
                     await matureButton.click();
                     await page.waitFor(500);
@@ -157,10 +205,10 @@ async function viewTopStreamer() {
         const interval = setInterval(function() {
             request.get({ url: `https://api.twitch.tv/helix/streams?user_id=${topStream.user_id}`, headers: headers}, function(e, r, body) {
                 let data = JSON.parse(body);
-                if (data.data[0].type != 'live' || data.data[0].game_id != '488552') {
+                if (data.data[0].type != 'live' || data.data[0].game_id != config.RequestData.game) {
                     //Request top streamers again
                     clearInterval(interval);
-                    console.log(`${topStream.user_name} is not live anymore or has switched games from Overwatch. Switching streams...`);
+                    console.log(`${topStream.user_name} is not live anymore or has switched games. Switching streams...`);
                     viewTopStreamer();
                 }
             });
@@ -200,7 +248,7 @@ if(fs.existsSync('./Application'))
                 return;
             }
             const browser = await puppet.launch({
-                executablePath: './Application/chrome.exe',
+                executablePath: './Application/chrome.exe'
             });
             loginToTwitch(browser)
             for(let i = 0; i < streams.length; i ++)
@@ -218,7 +266,7 @@ if(fs.existsSync('./Application'))
                     setTerminalTitle(`Twitch Rewards Farmer - ${streams[i].username}`);
                     await page.waitFor(3000);
                     matureButton = await page.$('button[class="player-content-button js-player-mature-accept js-mature-accept-label"]');
-                    if (matureButton !== null)
+                    if (matureButton != null)
                     {
                         await matureButton.click();
                         await page.waitFor(500);
@@ -244,12 +292,12 @@ if(fs.existsSync('./Application'))
     }
     else
     {
-        if(fs.existsSync('./preferredstreamers.txt')) {
+       // if(fs.existsSync('./preferredstreamers.txt')) {
 
-        } else {
-            console.log('No streams.txt file found. Viewing top streamer in Overwatch category... (if you would like to prefer specific Overwatch streamers, please create a file called preferredstreamers.txt and type the usernames of each streamer, most preferred at the top.)');
-            viewTopStreamer();
-        }
+        //} else {
+          //  console.log('No streams.txt file found. Viewing top streamer in Overwatch category... (if you would like to prefer specific Overwatch streamers, please create a file called preferredstreamers.txt and type the usernames of each streamer, most preferred at the top.)');
+        viewTopStreamer();
+        //}
     }
 }
 else
