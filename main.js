@@ -93,21 +93,20 @@ async function loginToTwitch(browser, page, callback) {
             }
             else
             {
-                page
-                    //.waitForSelector('button.tw-align-items-center tw-align-middle tw-border-bottom-left-radius-medium tw-border-bottom-right-radius-medium tw-border-top-left-radius-medium tw-border-top-right-radius-medium tw-core-button tw-core-button--secondary tw-inline-flex tw-interactive tw-justify-content-center tw-overflow-hidden tw-relative')
-                    .waitForNavigation()
-                    .then((async function() {
-                        console.log("We should be logged in now.");
-                        loggedIn = true;
-                        //page.removeAllListeners('pageerror');
-                        const cookiesObj = await page.cookies();
-                        let data = JSON.stringify(cookiesObj);
-                        let filePath;
-                        if(config.AppBehavior.UseMultipleAccounts == 'yes') filePath = './cookies-' + data[5]['value'] + '.json';
-                        else filePath = './cookies.json';
-                        fs.writeFileSync(filePath, data);
-                        await loginToTwitch(browser, page, callback);
-                    }));
+                await page.waitForSelector('polygon.tw-animated-glitch-logo__body')
+                //.waitForNavigation()
+                console.log("We should be logged in now.");
+                loggedIn = true;
+                //page.removeAllListeners('pageerror');
+                const cookiesObj = await page.cookies();
+                let data = JSON.stringify(cookiesObj);
+                let filePath;
+                console.log(data[4]);
+                if(config.AppBehavior.UseMultipleAccounts == 'yes') filePath = './cookies-' + data[4]['value'] + '.json';
+                else filePath = './cookies.json';
+                fs.writeFileSync(filePath, data);
+                await loginToTwitch(browser, page, callback);
+
             }
         }
         else
@@ -120,7 +119,7 @@ async function loginToTwitch(browser, page, callback) {
     })();
 }
 
-async function viewTopStreamer() {
+async function viewTopStreamer(streamers = null) {
     //Overwatch title id is 488552
     //Valorant title id is 516575
     let headers = {
@@ -128,35 +127,61 @@ async function viewTopStreamer() {
     };
     let topStream;
     //Request top streamers
-    request.get({ url: 'https://api.twitch.tv/helix/streams?game_id=' + config.RequestData.game, headers: headers}, function(e, r, body) {
-        let data = JSON.parse(body);
-        const sortedStreams = data.data.sort(function(a, b) {
-            return b.viewer_count - a.viewer_count;
+    if(!streamers){
+        request.get({ url: 'https://api.twitch.tv/helix/streams?game_id=' + config.RequestData.game, headers: headers}, function(e, r, body) {
+            let data = JSON.parse(body);
+            const sortedStreams = data.data.sort(function(a, b) {
+                return b.viewer_count - a.viewer_count;
+            });
+            for (let i = 0; i < sortedStreams.length; i++) {
+                if (sortedStreams[i].type == 'live' && sortedStreams[i].language == 'en') {
+                    topStream = sortedStreams[i];
+                    break;
+                }
+            }
+            afterEval(topStream);
+            /*async.forEach(data.data, evaluateStream, afterEval);
+            
+            function evaluateStream(stream, callback) {
+                if (stream.type == 'live' && stream.language == 'en') {
+                    topStream = stream;
+                    callback();
+                }
+                else
+                {
+                    console.log(stream.type);
+                    console.log(stream.language);
+                }
+            }*/
         });
-        for (let i = 0; i < sortedStreams.length; i++) {
-            if (sortedStreams[i].type == 'live' && sortedStreams[i].language == 'en') {
-                topStream = sortedStreams[i];
-                break;
-            }
+    }
+    else
+    {
+        for(let i = 0; i < streamers.length; i++) {
+            console.log("Searching for streamer");
+            let data;
+            request.get({ url: 'https://api.twitch.tv/helix/streams?user_login=' + streamers[i], headers: headers}, function(e, r, body) {
+                data = JSON.parse(body);
+                data = data.data[0];
+                if(data.type == 'live' && data.game_id == config.RequestData.game && data.tag_ids.includes("c2542d6d-cd10-4532-919b-3d19f30a768b")) {
+                    console.log("Found streamer");
+                    afterEval(data);
+                }
+                else
+                {
+                    console.log("Bad stream found");
+                }
+            });
         }
-        afterEval();
-        /*async.forEach(data.data, evaluateStream, afterEval);
         
-        function evaluateStream(stream, callback) {
-            if (stream.type == 'live' && stream.language == 'en') {
-                topStream = stream;
-                callback();
-            }
-            else
-            {
-                console.log(stream.type);
-                console.log(stream.language);
-            }
-        }*/
-    });
+    }
 
-    async function afterEval() {
+    async function afterEval(topStream) {
         //View that livestream
+        if(!topStream) {
+            console.log("No valid streamers found in preferredstreamers.txt");
+            return;
+        }
         let browser = await puppet.launch({
             executablePath: './Application/chrome.exe',
             headless: false
@@ -180,6 +205,16 @@ async function viewTopStreamer() {
                     height: 720,
                     deviceScaleFactor: 1,
                 });
+                let cookiesArr;
+                if(config.AppBehavior.UseMultipleAccounts == 'yes') cookiesArr = require('./cookies-' + username + '.json');
+                else cookiesArr = require('./cookies.json');
+                if(cookiesArr.length != 0)
+                {
+                    for (let cookie of cookiesArr)
+                    {
+                        await page.setCookie(cookie);
+                    }
+                }
                 await page.setDefaultTimeout(0);
                 await page.goto(`https://twitch.tv/${topStream.user_name}`);
                 await page.waitFor('body')
@@ -219,6 +254,10 @@ async function viewTopStreamer() {
 setTerminalTitle('Twitch Rewards Farmer');
 if(fs.existsSync('./Application'))
 {
+    if(config.RequestData.clientid == "") {
+        console.log("Please set your client ID in the config.ini file.");
+        return;
+    }
     if(fs.existsSync('./streams.txt'))
     {
         let lines = fs.readFileSync('./streams.txt', 'utf8').toString();
@@ -292,12 +331,13 @@ if(fs.existsSync('./Application'))
     }
     else
     {
-       // if(fs.existsSync('./preferredstreamers.txt')) {
-
-        //} else {
-          //  console.log('No streams.txt file found. Viewing top streamer in Overwatch category... (if you would like to prefer specific Overwatch streamers, please create a file called preferredstreamers.txt and type the usernames of each streamer, most preferred at the top.)');
-        viewTopStreamer();
-        //}
+        if(fs.existsSync('./preferredstreamers.txt')) {
+            let prefStreamers = fs.readFileSync("./preferredstreamers.txt").toString();
+            viewTopStreamer(prefStreamers.split("\n"));
+        } else {
+            console.log('No streams.txt file found. Viewing top streamer in Overwatch category... (if you would like to prefer specific Overwatch streamers, please create a file called preferredstreamers.txt and type the usernames of each streamer, most preferred at the top.)');
+            viewTopStreamer();
+        }
     }
 }
 else
