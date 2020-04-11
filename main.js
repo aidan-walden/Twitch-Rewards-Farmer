@@ -112,7 +112,8 @@ async function loginToTwitch(browser, page, cookiesPath = null, callback) {
         } else {
             await browser.close();
             console.log("No manual login necessary.");
-            callback(cookiesPath.split('-')[1].split('.')[0]);
+            if (config.AppBehavior.UseMultipleAccounts == 'yes') callback(cookiesPath.split('-')[1].split('.')[0]);
+            else callback(cookiesPath.split('.')[0]);
         }
 
     })();
@@ -441,7 +442,7 @@ if(fs.existsSync('./Application'))
             console.log("Looking for streamers in preferredstreamers.txt");
             viewTopStreamer(prefStreamers.split("\n"));
         } else {
-            console.log('No streams.txt file found. Viewing top streamer in Overwatch category... (if you would like to prefer specific Overwatch streamers, please create a file called preferredstreamers.txt and type the usernames of each streamer, most preferred at the top.)');
+            console.log('No streams.txt file found. Viewing top streamer in game category... (if you would like to prefer specific streamers, please create a file called preferredstreamers.txt and type the usernames of each streamer, most preferred at the top.)');
             viewTopStreamer();
         }
     }
