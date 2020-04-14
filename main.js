@@ -43,11 +43,13 @@ async function loginToTwitch(browser, page, cookiesPath = null, callback) {
         let username;
         let cookiesStored = fs.existsSync('./cookies.json');
         if (cookiesStored) {
+            cookiesPath = './cookies.json';
             console.log("Loading cookies...")
             if (config.AppBehavior.UseMultipleAccounts == 'yes') {
                 let cookies = JSON.parse(fs.readFileSync('./cookies.json', 'utf8'));
                 username = cookies[4]['value'];
                 fs.renameSync('./cookies.json', './cookies-' + username + '.json');
+                cookiesPath = './cookies-' + username + '.json';
             }
 
             let cookiesArr;
@@ -112,7 +114,9 @@ async function loginToTwitch(browser, page, cookiesPath = null, callback) {
         } else {
             await browser.close();
             console.log("No manual login necessary.");
+            console.log(cookiesPath);
             if (config.AppBehavior.UseMultipleAccounts == 'yes') callback(cookiesPath.split('-')[1].split('.')[0]);
+            
             else callback(cookiesPath.split('.')[0]);
         }
 
@@ -162,7 +166,7 @@ async function getStreamers(streamers) {
     })
 }
 
-async function viewTopStreamer(streamers = null) {
+async function viewTopStreamer(streamers = null, browser = null, page = null) {
     //Overwatch title id is 488552
     //Valorant title id is 516575
     let headers = {
@@ -189,7 +193,7 @@ async function viewTopStreamer(streamers = null) {
                             break;
                         }
                     }
-                    afterEval(topStream, streamers);
+                    afterEval(topStream, streamers, browser, page);
                 } catch (error) {
                     console.log("Line 185");
                     console.error(error.message);
@@ -223,7 +227,7 @@ async function viewTopStreamer(streamers = null) {
                 if(config.AppBehavior.DropsEnabledOnly == 'yes') {
                     if(streams[i].tag_ids.includes("c2542d6d-cd10-4532-919b-3d19f30a768b")) {
                         console.log("Found streamer");
-                        afterEval(streams[i], streamers);
+                        afterEval(streams[i], streamers, browser, page);
                         break;
                     }
                     else
@@ -233,7 +237,7 @@ async function viewTopStreamer(streamers = null) {
                 }
                 else {
                     console.log("Found streamer");
-                    afterEval(streams[i], streamers);
+                    afterEval(streams[i], streamers, browser, page);
                     break;
                 }
             }
@@ -246,22 +250,27 @@ async function viewTopStreamer(streamers = null) {
         
     }
 
-    async function afterEval(topStream, streamers) {
+    async function afterEval(topStream, streamers, browser = null, page = null) {
         //View that livestream
         if(!topStream) {
             console.log("No valid streamers found in preferredstreamers.txt");
             return;
         }
-        let browser = await puppet.launch({
-            executablePath: './Application/chrome.exe',
-            headless: false
-        });
-        let page = await browser.newPage();
-        await page.setViewport({
-            width: 1280,
-            height: 720,
-            deviceScaleFactor: 1,
-        });
+        if(!browser){
+            browser = await puppet.launch({
+                executablePath: './Application/chrome.exe',
+                headless: false
+            });
+        }
+        if(!page){
+            page = await browser.newPage();
+            await page.setViewport({
+                width: 1280,
+                height: 720,
+                deviceScaleFactor: 1,
+            });
+        }
+        
         await page.setDefaultTimeout(0);
         if (!loggedIn) {
             await loginToTwitch(browser, page, null, async function(username, streamers) {
@@ -317,12 +326,12 @@ async function viewTopStreamer(streamers = null) {
                 res.on("end", () => {
                     try {
                         let data = JSON.parse(body);
-                    if (data.data[0] == null || data.data[0].game_id != config.RequestData.game) {
+                    if (data.data[0] == null || data.data[0].game_id != config.RequestData.game || !data.data[0].tag_ids.includes("c2542d6d-cd10-4532-919b-3d19f30a768b")) {
                         //Request top streamers again
                         clearInterval(checkStreamInterval);
                         clearInterval(channelPointsInterval);
-                        console.log(`${topStream.user_name} is not live anymore or has switched games. Switching streams...`);
-                        viewTopStreamer(streamers);
+                        console.log(`${topStream.user_name} is not live anymore, has switched games, or has disabled drops. Switching streams...`);
+                        viewTopStreamer(streamers, browser, page);
                     }
                     } catch (error) {
                         console.error(error.message);
