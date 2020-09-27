@@ -1,20 +1,23 @@
 {
   "name": "twitch-rewards-farmer",
   "version": "1.0.0",
-  "description": "Uses puppeteer Chrome API to emulate your user watching a Twitch stream in order to earn drops",
-  "main": "main.js",
+  "description": "Runs a Twitch session in the background to gain viewing hours.",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "aidan-walden",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aidan-walden/Twitch-Rewards-Farmer.git"
+  },
+  "author": "Aidan Walden",
   "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aidan-walden/Twitch-Rewards-Farmer/issues"
+  },
+  "homepage": "https://github.com/aidan-walden/Twitch-Rewards-Farmer#readme",
   "dependencies": {
-    "async": "^3.2.0",
-    "async-request": "^1.2.0",
-    "fs": "0.0.1-security",
-    "ini": "^1.3.5",
-    "puppeteer": "^2.1.1",
-    "readline": "^1.3.0",
-    "request": "^2.88.2"
+    "axios": "^0.20.0",
+    "puppeteer-core": "^5.3.1"
   }
 }
