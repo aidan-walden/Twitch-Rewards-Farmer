@@ -51,7 +51,7 @@ const loginToTwitch = async(browser, page) => {
     }
     await browser.close();
     browser = await puppet.launch({
-        executablePath: './Application/chrome.exe'
+        executablePath: './Application/chrome.exe',
     });
     page = await browser.newPage();
     await page.goto('https://www.twitch.tv', {waitUntil: 'networkidle2'});
@@ -70,6 +70,17 @@ const getStreamer = async(streamer, oauth) => {
     return data['data'][0];
 }
 
+const getStreamTags = async(streamerId, oauth) => {
+    let headers = {
+        'Client-ID': config.twitch.clientid,
+        'Authorization': 'Bearer ' + oauth
+    };
+    const { data } = await axios.get(`https://api.twitch.tv/helix/streams/tags?broadcaster_id=${streamerId}`, {
+        headers: headers
+    });
+    return data["data"];
+}
+
 const getTopStreamer = async(oauth) => {
     let headers = {
         'Client-ID': config.twitch.clientid,
@@ -83,23 +94,28 @@ const getTopStreamer = async(oauth) => {
     });
     for (let stream of sortedStreams) {
         if (stream != null && stream['type'] === 'live' && stream['language'] === 'en') {
-            /*if(config.app.dropsOnly) {
-                if(stream['tag_ids'].includes("c2542d6d-cd10-4532-919b-3d19f30a768b")) {
-                    return stream;
+            if(config.app.dropsOnly) {
+                let streamTags = await getStreamTags(stream['user_id'], oauth);
+                for (const tag of streamTags) {
+                    if(tag["tag_id"] === "c2542d6d-cd10-4532-919b-3d19f30a768b")
+                    {
+                        return stream;
+                    }
                 }
-            } else {
+            }
+            else
+            {
                 return stream;
-            }*/
-            return stream;
+            }
         }
     }
 }
 
 const watchStreamer = async(browser, page, streamer) => {
     await page.setDefaultTimeout(0);
-    await page.goto(`https://twitch.tv/${streamer.user_name}`);
+    await page.goto(`https://twitch.tv/${streamer['user_name']}`);
     await page.waitForSelector('body')
-    console.log(`Now watching ${streamer.user_name}`);
+    console.log(`Now watching ${streamer['user_name']}`);
     //setTerminalTitle(`Twitch Rewards Farmer - ${username} watching ${streamer.user_name}`);
     await page.waitForTimeout(3000);
     matureButton = await page.$('button[class="player-content-button js-player-mature-accept js-mature-accept-label"]');

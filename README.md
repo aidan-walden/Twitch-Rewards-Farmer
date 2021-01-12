@@ -42,3 +42,10 @@ Execute
 node .
 ```
 in the Twitch Rewards Farmer directory in order to run the bot. If everything is working correctly, you should see a new Chrome window appear. Log into your Twitch account and check, "Remember this computer for 30 days".
+
+# Searching for game IDs
+Execute
+```bash
+node game-search.js
+```
+and follow the on-screen instructions in order to find a game ID.
