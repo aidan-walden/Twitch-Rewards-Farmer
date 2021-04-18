@@ -12,7 +12,7 @@ Requires a working installation of Node.js
 ```bash
 npm install --only=prod
 ```
-in order to install dependencies. Run the following command instead if you are planning on changing the code and/or compiling it yourself:
+in order to install dependencies. Run the following command instead if you are planning on changing the code and/or compiling it yourself (which should not be done using the files in the releases):
 ```bash
 npm install
 ``` 
