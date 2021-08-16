@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/index.ts"
+    "start": "ts-node src/index.ts",
+    "test": "ts-node src/test.ts",
+    "prettier-format": "prettier --config .prettierrc 'src/*.ts' --write"
   },
   "repository": {
     "type": "git",
@@ -19,14 +21,13 @@
   "homepage": "https://github.com/aidan-walden/Twitch-Rewards-Farmer#readme",
   "dependencies": {
     "axios": "^0.21.1",
-    "googleapis": "^71.0.0",
-    "puppeteer-core": "^8.0.0"
+    "puppeteer": "^10.2.0",
+    "puppeteer-extra": "^3.1.18",
+    "puppeteer-extra-plugin-stealth": "^2.7.8"
   },
   "devDependencies": {
-    "@types/axios": "^0.14.0",
     "@types/node": "^14.14.41",
     "@types/puppeteer": "^5.4.3",
-    "@types/puppeteer-core": "^5.4.0",
     "@typescript-eslint/eslint-plugin": "latest",
     "@typescript-eslint/parser": "latest",
     "eslint": "^7.12.1",
@@ -34,6 +35,7 @@
     "eslint-plugin-import": "^2.22.1",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^4.2.1",
+    "prettier": "^2.3.2",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.4"
   }

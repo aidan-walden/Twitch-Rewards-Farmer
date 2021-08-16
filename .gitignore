@@ -2,6 +2,11 @@ dist
 .pnp.js
 .yarn
 .yarnrc.yml
+yarn-error.log
 yarn.lock
 node_modules
 .eslintrc.*
+.prettierrc
+src/Application
+src/cookies
+src/config
